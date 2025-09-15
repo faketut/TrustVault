@@ -11,7 +11,7 @@ const userSchema = new mongoose.Schema({
   // Authentication platform
   platform: { 
     type: String, 
-    enum: ['wechat', 'qq', 'weibo', 'apple', 'phone', 'other'], 
+    enum: ['wechat', 'apple', 'phone'], 
     required: true 
   },
   

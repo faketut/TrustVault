@@ -64,7 +64,7 @@ const userSchema = new mongoose.Schema({
 const contractSchema = new mongoose.Schema({
   contractId: { type: String, unique: true, required: true }, // Unique contract identifier
   partyAId: { type: String, required: true }, // Social media ID
-  partyBId: { type: String, required: true }, // Social media ID
+  partyBId: { type: String, required: false, default: null }, // Social media ID (optional until party B signs)
   startDateTime: { type: Date, required: true },
   endDateTime: { type: Date, required: true },
   status: { 

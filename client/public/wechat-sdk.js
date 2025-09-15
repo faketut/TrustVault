@@ -4,8 +4,10 @@
 (function() {
   'use strict';
   
-  // WeChat SDK configuration
-  const WECHAT_APPID = process.env.REACT_APP_WECHAT_APPID || 'your_wechat_appid';
+  // WeChat SDK configuration (browser-safe; no process.env in public JS)
+  // Option 1: Define window.__WECHAT_APPID__ in index.html
+  // Option 2: Rely on backend signature response to include appId
+  const WECHAT_APPID = (window.__WECHAT_APPID__ || 'your_wechat_appid');
   
   // Load WeChat JS-SDK
   function loadWeChatSDK() {

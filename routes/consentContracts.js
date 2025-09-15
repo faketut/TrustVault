@@ -35,6 +35,16 @@ router.post('/', authMiddleware, async (req, res) => {
   }
 });
 
+// List all contracts (admin/lawyer can view all; regular users will also see all per request)
+router.get('/', authMiddleware, async (req, res) => {
+  try {
+    const contracts = await Contract.find({}).sort({ createdAt: -1 });
+    res.json(contracts);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch contracts' });
+  }
+});
+
 // Give initial consent
 router.post('/:contractId/initial-consent', authMiddleware, async (req, res) => {
   try {
@@ -280,5 +290,7 @@ function getStatusMessage(status) {
       return 'Unknown contract status.';
   }
 }
+
+// QR code endpoint removed: QR is generated client-side
 
 module.exports = router;

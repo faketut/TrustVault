@@ -4,6 +4,7 @@ import { User, Contract, getUserDisplayId } from '../utils/types';
 import ContractCreator from './ContractCreator';
 import ContractManager from './ContractManager';
 import QRScanner from './QRScanner';
+import { generateContractQRCodeSVG } from '../vendor/qrCodeGen';
 
 const Dashboard: React.FC<{ user: User; onLogout: () => void }> = ({ user, onLogout }) => {
   const [contracts, setContracts] = useState<Contract[]>([]);
@@ -14,6 +15,8 @@ const Dashboard: React.FC<{ user: User; onLogout: () => void }> = ({ user, onLog
   const [showContractManager, setShowContractManager] = useState(false);
   const [selectedContract, setSelectedContract] = useState<Contract | null>(null);
   const [stats, setStats] = useState({ totalContracts: 0, activeContracts: 0, revokedContracts: 0 });
+  const [showProfileQR, setShowProfileQR] = useState(false);
+  const [profileQRData, setProfileQRData] = useState<string>('');
 
   useEffect(() => {
     loadContracts();
@@ -22,7 +25,8 @@ const Dashboard: React.FC<{ user: User; onLogout: () => void }> = ({ user, onLog
 
   const loadContracts = async () => {
     try {
-      const response = await contractAPI.getMyContracts();
+      // Show all contracts in Contract Management
+      const response = await contractAPI.getAll();
       setContracts(response.data);
     } catch (err: any) {
       setError('Failed to load contracts');
@@ -58,6 +62,38 @@ const Dashboard: React.FC<{ user: User; onLogout: () => void }> = ({ user, onLog
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     onLogout();
+  };
+
+  const generateProfileQR = () => {
+    // Create a data object with user's contract statistics
+    const profileData = {
+      userId: user.id,
+      userName: getUserDisplayId(user),
+      totalContracts: stats.totalContracts,
+      activeContracts: stats.activeContracts,
+      revokedContracts: stats.revokedContracts,
+      generatedAt: new Date().toISOString()
+    };
+
+    // Convert to JSON string and generate QR code
+    const jsonString = JSON.stringify(profileData);
+    const qrSvg = generateContractQRCodeSVG(jsonString);
+    setProfileQRData(qrSvg);
+    setShowProfileQR(true);
+  };
+
+  const copyProfileData = () => {
+    const profileData = {
+      userId: user.id,
+      userName: getUserDisplayId(user),
+      totalContracts: stats.totalContracts,
+      activeContracts: stats.activeContracts,
+      revokedContracts: stats.revokedContracts,
+      generatedAt: new Date().toISOString()
+    };
+    
+    navigator.clipboard.writeText(JSON.stringify(profileData, null, 2));
+    alert('Profile data copied to clipboard!');
   };
 
   const getStatusColor = (status: string) => {
@@ -119,11 +155,6 @@ const Dashboard: React.FC<{ user: User; onLogout: () => void }> = ({ user, onLog
           onContractDeleted={(contractId) => {
             setContracts(contracts.filter(c => c.contractId !== contractId));
             loadStats();
-          }}
-          onGenerateQR={(contract) => {
-            // Navigate to QR scanner with the contract
-            setShowContractManager(false);
-            setShowQRScanner(true);
           }}
         />
       </div>
@@ -235,19 +266,37 @@ const Dashboard: React.FC<{ user: User; onLogout: () => void }> = ({ user, onLog
             Active: {user.signCount} | Revoked: {user.revokeCount}
           </p>
         </div>
-        <button
-          onClick={handleLogout}
-          style={{
-            padding: '8px 16px',
-            backgroundColor: '#dc004e',
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer'
-          }}
-        >
-          Logout
-        </button>
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          <button
+            onClick={generateProfileQR}
+            style={{
+              padding: '8px 16px',
+              backgroundColor: '#17a2b8',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '5px'
+            }}
+          >
+            📱 Profile QR
+          </button>
+          <button
+            onClick={handleLogout}
+            style={{
+              padding: '8px 16px',
+              backgroundColor: '#dc004e',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer'
+            }}
+          >
+            Logout
+          </button>
+        </div>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
@@ -387,6 +436,106 @@ const Dashboard: React.FC<{ user: User; onLogout: () => void }> = ({ user, onLog
           </div>
         </div>
       </div>
+
+      {/* Profile QR Modal */}
+      {showProfileQR && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.7)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }} onClick={() => setShowProfileQR(false)}>
+          <div style={{
+            backgroundColor: 'white',
+            padding: '30px',
+            borderRadius: '8px',
+            maxWidth: '500px',
+            width: '90%',
+            maxHeight: '90%',
+            overflow: 'auto',
+            textAlign: 'center'
+          }} onClick={e => e.stopPropagation()}>
+            <h3 style={{ marginTop: 0, color: '#333' }}>Your Profile QR Code</h3>
+            
+            <div style={{ marginBottom: '20px' }}>
+              <p style={{ marginBottom: '15px', fontSize: '16px', color: '#666' }}>
+                Share this QR code to let others view your contract statistics:
+              </p>
+              
+              <div style={{ 
+                backgroundColor: '#f8f9fa', 
+                padding: '15px', 
+                borderRadius: '4px',
+                marginBottom: '15px'
+              }}>
+                <div style={{ marginBottom: '10px' }}>
+                  <strong>User:</strong> {getUserDisplayId(user)}
+                </div>
+                <div style={{ marginBottom: '10px' }}>
+                  <strong>Total Contracts:</strong> {stats.totalContracts}
+                </div>
+                <div style={{ marginBottom: '10px' }}>
+                  <strong>Active Contracts:</strong> {stats.activeContracts}
+                </div>
+                <div>
+                  <strong>Revoked Contracts:</strong> {stats.revokedContracts}
+                </div>
+              </div>
+
+              {/* QR Code Display */}
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'center', 
+                marginBottom: '20px',
+                padding: '20px',
+                backgroundColor: 'white',
+                border: '1px solid #dee2e6',
+                borderRadius: '8px'
+              }}>
+                <div 
+                  dangerouslySetInnerHTML={{ __html: profileQRData }}
+                  style={{ maxWidth: '200px', maxHeight: '200px' }}
+                />
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+              <button
+                onClick={copyProfileData}
+                style={{
+                  padding: '10px 20px',
+                  backgroundColor: '#007bff',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer'
+                }}
+              >
+                Copy Data
+              </button>
+              <button
+                onClick={() => setShowProfileQR(false)}
+                style={{
+                  padding: '10px 20px',
+                  backgroundColor: '#6c757d',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer'
+                }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

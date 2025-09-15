@@ -62,6 +62,7 @@ export const authAPI = {
 
 export const contractAPI = {
   create: (contractData: any) => api.post('/consent-contracts', contractData),
+  getAll: () => api.get('/consent-contracts'),
   giveInitialConsent: (contractId: string) => api.post(`/consent-contracts/${contractId}/initial-consent`),
   giveOngoingConsent: (contractId: string) => api.post(`/consent-contracts/${contractId}/ongoing-consent`),
   revoke: (contractId: string) => api.post(`/consent-contracts/${contractId}/revoke`),
@@ -70,6 +71,7 @@ export const contractAPI = {
   getMyContracts: () => api.get('/consent-contracts/my-contracts'),
   getContract: (contractId: string) => api.get(`/consent-contracts/${contractId}`),
   getStatus: (contractId: string) => api.get(`/consent-contracts/${contractId}/status`),
+  getQrSvg: (contractId: string) => api.get(`/consent-contracts/${contractId}/qrcode`, { responseType: 'text' }),
 };
 
 export const healthAPI = {

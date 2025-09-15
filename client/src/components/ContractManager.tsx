@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { contractAPI } from '../services/api';
+import api, { contractAPI } from '../services/api';
+import { generateContractQRCodeDataUrl } from '../vendor/qrCodeGen';
 import { Contract, User } from '../utils/types';
 
 interface ContractManagerProps {
@@ -7,7 +8,6 @@ interface ContractManagerProps {
   user: User;
   onContractUpdated: (contract: Contract) => void;
   onContractDeleted: (contractId: string) => void;
-  onGenerateQR: (contract: Contract) => void;
 }
 
 type SortField = 'contractId' | 'status' | 'startDateTime' | 'endDateTime';
@@ -17,8 +17,7 @@ const ContractManager: React.FC<ContractManagerProps> = ({
   contracts, 
   user, 
   onContractUpdated, 
-  onContractDeleted, 
-  onGenerateQR 
+  onContractDeleted
 }) => {
   const [filteredContracts, setFilteredContracts] = useState<Contract[]>(contracts);
   const [searchTerm, setSearchTerm] = useState('');
@@ -28,6 +27,7 @@ const ContractManager: React.FC<ContractManagerProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [selectedContract, setSelectedContract] = useState<Contract | null>(null);
+  const [qrUrl, setQrUrl] = useState<string>('');
 
   const filterAndSortContracts = useCallback(() => {
     let filtered = [...contracts];
@@ -203,20 +203,6 @@ const ContractManager: React.FC<ContractManagerProps> = ({
           </div>
 
           <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-            <button
-              onClick={() => onGenerateQR(selectedContract)}
-              style={{
-                padding: '10px 20px',
-                backgroundColor: '#28a745',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer'
-              }}
-            >
-              Generate QR Code
-            </button>
-
             {selectedContract.status === 'active' && (
               <button
                 onClick={() => handleRevoke(selectedContract)}
@@ -344,19 +330,8 @@ const ContractManager: React.FC<ContractManagerProps> = ({
           >
             Status {sortField === 'status' && (sortDirection === 'asc' ? '↑' : '↓')}
           </div>
-          <div 
-            style={{ cursor: 'pointer', userSelect: 'none' }}
-            onClick={() => handleSort('startDateTime')}
-          >
-            Start Time {sortField === 'startDateTime' && (sortDirection === 'asc' ? '↑' : '↓')}
-          </div>
-          <div 
-            style={{ cursor: 'pointer', userSelect: 'none' }}
-            onClick={() => handleSort('endDateTime')}
-          >
-            End Time {sortField === 'endDateTime' && (sortDirection === 'asc' ? '↑' : '↓')}
-          </div>
-          <div>Actions</div>
+          <div>Details</div>
+          <div>QR code</div>
         </div>
 
         {filteredContracts.length === 0 ? (
@@ -394,15 +369,7 @@ const ContractManager: React.FC<ContractManagerProps> = ({
                 </span>
               </div>
               
-              <div style={{ fontSize: '12px', color: '#6c757d' }}>
-                {formatDateTime(contract.startDateTime)}
-              </div>
-              
-              <div style={{ fontSize: '12px', color: '#6c757d' }}>
-                {formatDateTime(contract.endDateTime)}
-              </div>
-              
-              <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
+              <div>
                 <button
                   onClick={() => handleViewDetails(contract)}
                   style={{
@@ -415,11 +382,19 @@ const ContractManager: React.FC<ContractManagerProps> = ({
                     fontSize: '11px'
                   }}
                 >
-                  View
+                  Details
                 </button>
-                
+              </div>
+
+              <div>
                 <button
-                  onClick={() => onGenerateQR(contract)}
+                  onClick={() => {
+                    const base = (api as any).defaults.baseURL as string;
+                    const apiBase = base.replace(/\/api\/?$/, '');
+                    const content = `${apiBase}/contracts/${contract.contractId}`;
+                    const dataUrl = generateContractQRCodeDataUrl(content);
+                    setQrUrl(dataUrl);
+                  }}
                   style={{
                     padding: '4px 8px',
                     backgroundColor: '#28a745',
@@ -430,41 +405,7 @@ const ContractManager: React.FC<ContractManagerProps> = ({
                     fontSize: '11px'
                   }}
                 >
-                  QR
-                </button>
-                
-                {contract.status === 'active' && (
-                  <button
-                    onClick={() => handleRevoke(contract)}
-                    disabled={loading}
-                    style={{
-                      padding: '4px 8px',
-                      backgroundColor: '#dc3545',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '3px',
-                      cursor: loading ? 'not-allowed' : 'pointer',
-                      fontSize: '11px'
-                    }}
-                  >
-                    Revoke
-                  </button>
-                )}
-                
-                <button
-                  onClick={() => handleDelete(contract)}
-                  disabled={loading}
-                  style={{
-                    padding: '4px 8px',
-                    backgroundColor: '#6c757d',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '3px',
-                    cursor: loading ? 'not-allowed' : 'pointer',
-                    fontSize: '11px'
-                  }}
-                >
-                  Delete
+                  QR code
                 </button>
               </div>
             </div>
@@ -486,6 +427,36 @@ const ContractManager: React.FC<ContractManagerProps> = ({
         <strong> Inactive:</strong> {contracts.filter(c => c.status === 'inactive').length} | 
         <strong> Revoked:</strong> {contracts.filter(c => c.status === 'revoked').length}
       </div>
+
+      {qrUrl && (
+        <div
+          onClick={() => setQrUrl('')}
+          style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex',
+            alignItems: 'center', justifyContent: 'center', zIndex: 1000
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ background: 'white', padding: 20, borderRadius: 8, textAlign: 'center' }}
+          >
+            <h3 style={{ marginTop: 0 }}>Contract QR Code</h3>
+            <object data={qrUrl} type="image/svg+xml" style={{ width: 260, height: 260 }}>
+              <img src={qrUrl} alt="QR Code" style={{ width: 260, height: 260 }} />
+            </object>
+            <div style={{ marginTop: 12, display: 'flex', gap: 8, justifyContent: 'center' }}>
+              <a href={qrUrl} download target="_blank" rel="noreferrer" style={{
+                padding: '6px 12px', backgroundColor: '#17a2b8', color: 'white',
+                textDecoration: 'none', borderRadius: 4
+              }}>Download SVG</a>
+              <button onClick={() => setQrUrl('')} style={{
+                padding: '6px 12px', backgroundColor: '#6c757d', color: 'white', border: 'none', borderRadius: 4
+              }}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

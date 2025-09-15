@@ -1,0 +1,35 @@
+{
+  "provider": "mock",
+  "providers": {
+    "mock": {
+      "logToConsole": true,
+      "simulateDelay": 1000,
+      "simulateFailure": false,
+      "failureRate": 0
+    },
+    "twilio": {
+      "accountSid": "ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "authToken": "your_twilio_auth_token_here",
+      "phoneNumber": "+1234567890"
+    },
+    "aws": {
+      "region": "us-east-1",
+      "accessKeyId": "your_aws_access_key_id",
+      "secretAccessKey": "your_aws_secret_access_key"
+    },
+    "custom": {
+      "providerPath": "./services/sms/examples/FileSMSProvider.js",
+      "config": {
+        "outputDir": "./sms_logs",
+        "filenameFormat": "sms_{timestamp}_{phone}.txt",
+        "includeMetadata": true
+      }
+    },
+    "my-provider": {
+      "apiKey": "your_api_key_here",
+      "apiUrl": "https://api.example.com/sms",
+      "timeout": 30000,
+      "retries": 3
+    }
+  }
+}

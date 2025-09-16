@@ -10,7 +10,6 @@ const PhoneAuth: React.FC<PhoneAuthProps> = ({ onLogin }) => {
   const [step, setStep] = useState<'phone' | 'verify'>('phone');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [verificationCode, setVerificationCode] = useState('');
-  const [nickname, setNickname] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [countdown, setCountdown] = useState(0);
@@ -86,17 +85,13 @@ const PhoneAuth: React.FC<PhoneAuthProps> = ({ onLogin }) => {
       return;
     }
 
-    if (!nickname.trim()) {
-      setError('Please enter a nickname');
-      return;
-    }
+    // No nickname required
 
     setLoading(true);
     try {
       const response = await authAPI.verifyPhoneCode({
         phoneNumber,
-        verificationCode,
-        nickname: nickname.trim()
+        verificationCode
       });
       const { user, token } = response.data;
       
@@ -131,7 +126,6 @@ const PhoneAuth: React.FC<PhoneAuthProps> = ({ onLogin }) => {
   const handleBackToPhone = () => {
     setStep('phone');
     setVerificationCode('');
-    setNickname('');
     setError('');
   };
 
@@ -244,29 +238,11 @@ const PhoneAuth: React.FC<PhoneAuthProps> = ({ onLogin }) => {
           />
         </div>
 
-        <div style={{ marginBottom: '20px' }}>
-          <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
-            Nickname:
-          </label>
-          <input
-            type="text"
-            value={nickname}
-            onChange={(e) => setNickname(e.target.value)}
-            placeholder="Enter your display name"
-            required
-            style={{
-              width: '100%',
-              padding: '12px',
-              border: '1px solid #ddd',
-              borderRadius: '4px',
-              fontSize: '16px'
-            }}
-          />
-        </div>
+        {/* Nickname removed */}
 
         <button
           type="submit"
-          disabled={loading || verificationCode.length !== 6 || !nickname.trim()}
+          disabled={loading || verificationCode.length !== 6}
           style={{
             width: '100%',
             padding: '12px',
@@ -360,6 +336,31 @@ const PhoneAuth: React.FC<PhoneAuthProps> = ({ onLogin }) => {
           <p style={{ margin: 0 }}>
             • Verification code will be logged to console
           </p>
+          <div style={{ marginTop: 10, display: 'flex', gap: 8 }}>
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  setLoading(true);
+                  const response = await authAPI.verifyPhoneCode({
+                    phoneNumber: phoneNumber || '+10000000000',
+                    verificationCode: verificationCode || '123456'
+                  });
+                  const { user, token } = response.data;
+                  localStorage.setItem('token', token);
+                  localStorage.setItem('user', JSON.stringify(user));
+                  onLogin(user, token);
+                } catch (err: any) {
+                  setError(err.response?.data?.error || 'Mock phone login failed');
+                } finally {
+                  setLoading(false);
+                }
+              }}
+              style={{ padding: '8px 12px', backgroundColor: '#1976d2', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer' }}
+            >
+              Mock Phone Login (Dev)
+            </button>
+          </div>
         </div>
       )}
     </div>

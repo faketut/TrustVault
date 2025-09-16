@@ -159,6 +159,44 @@ const WeChatLogin: React.FC<WeChatLoginProps> = ({ onLogin }) => {
           {loading ? 'Logging in...' : 'Login with WeChat'}
         </button>
 
+        {/* Development/Testing button */}
+        {process.env.NODE_ENV === 'development' && (
+          <button
+            onClick={async () => {
+              try {
+                setLoading(true);
+                const res = await authAPI.socialLogin({
+                  socialMediaId: 'mock_wechat_' + Math.random().toString(36).slice(2, 8),
+                  platform: 'wechat',
+                  nickname: 'WeChat Dev',
+                  avatar: 'https://via.placeholder.com/50'
+                });
+                const { user, token } = res.data;
+                localStorage.setItem('token', token);
+                localStorage.setItem('user', JSON.stringify(user));
+                onLogin(user, token);
+              } catch (err: any) {
+                setError(err.response?.data?.error || 'Mock WeChat login failed');
+              } finally {
+                setLoading(false);
+              }
+            }}
+            disabled={loading}
+            style={{
+              width: '100%',
+              padding: '8px',
+              backgroundColor: '#666',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: loading ? 'not-allowed' : 'pointer',
+              fontSize: '14px'
+            }}
+          >
+            {loading ? 'Signing in...' : 'Mock WeChat Login (Dev)'}
+          </button>
+        )}
+
         <button
           onClick={handleRefreshToken}
           disabled={loading}

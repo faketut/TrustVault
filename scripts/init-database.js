@@ -7,7 +7,7 @@
 
 require('dotenv').config();
 const mongoose = require('mongoose');
-const { User, Contract, Annotation } = require('../models');
+const { User, Contract } = require('../models');
 
 const initializeDatabase = async () => {
   try {
@@ -63,10 +63,7 @@ const initializeCollections = async () => {
     await Contract.createCollection();
     console.log('  ✅ Contracts collection ready');
     
-    // Annotations collection
-    console.log('  📝 Creating annotations collection...');
-    await Annotation.createCollection();
-    console.log('  ✅ Annotations collection ready');
+    // Annotation model removed; annotations now live on Contract
     
   } catch (error) {
     console.error('❌ Error creating collections:', error);
@@ -82,6 +79,7 @@ const insertSampleData = async () => {
     const userCount = await User.countDocuments();
     const contractCount = await Contract.countDocuments();
     
+    let createdUsers = [];
     if (userCount === 0) {
       console.log('  👤 Creating sample users...');
       
@@ -167,68 +165,55 @@ const insertSampleData = async () => {
         }
       ];
       
-      await User.insertMany(sampleUsers);
+      createdUsers = await User.insertMany(sampleUsers);
       console.log('  ✅ Sample users created');
     } else {
       console.log('  ℹ️  Users collection already has data, skipping...');
+      createdUsers = await User.find({}).lean();
     }
     
     if (contractCount === 0) {
       console.log('  📄 Creating sample contracts...');
       
-      // Create sample contracts
+      // Build lookup to map legacy identifiers to created user ids
+      const findBy = (pred) => {
+        const u = createdUsers.find(pred);
+        return u ? String(u._id) : null;
+      };
+
+      const partyA1 = findBy(u => u.socialMediaId === 'sample_wechat_user');
+      const partyB1 = findBy(u => u.phoneNumber === '+1234567890');
+      const partyA2 = findBy(u => u.appleId === 'sample_apple_id_12345');
+      const partyB2 = findBy(u => u.socialMediaId === 'admin_wechat_user');
+
       const sampleContracts = [
         {
           contractId: 'sample_contract_1',
-          partyAId: 'sample_wechat_user',
-          partyBId: '+1234567890', // Phone user ID
+          partyAId: partyA1,
+          partyBId: partyB1,
           startDateTime: new Date(),
-          endDateTime: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
-          status: 'active'
+          endDateTime: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+          status: 'active',
+          updatedAt: new Date()
         },
         {
           contractId: 'sample_contract_2',
-          partyAId: 'sample_apple_id_12345', // Apple user ID
-          partyBId: 'admin_wechat_user', // Admin WeChat user ID
+          partyAId: partyA2,
+          partyBId: partyB2 ?? 'pending',
           startDateTime: new Date(),
-          endDateTime: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
-          status: 'inactive'
+          endDateTime: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+          status: 'inactive',
+          updatedAt: new Date()
         }
-      ];
-      
+      ].filter(c => c.partyAId);
+
       await Contract.insertMany(sampleContracts);
       console.log('  ✅ Sample contracts created');
     } else {
       console.log('  ℹ️  Contracts collection already has data, skipping...');
     }
     
-    // Create sample annotations
-    const annotationCount = await Annotation.countDocuments();
-    if (annotationCount === 0) {
-      console.log('  📝 Creating sample annotations...');
-      
-      const sampleAnnotations = [
-        {
-          contractId: 'sample_contract_1',
-          lawyerId: '+1987654321', // Lawyer phone user ID
-          note: 'This is a sample contract for testing purposes.',
-          severity: 'info',
-          timestamp: new Date()
-        },
-        {
-          contractId: 'sample_contract_2',
-          lawyerId: '+1987654321', // Lawyer phone user ID
-          note: 'Contract requires review before activation.',
-          severity: 'warning',
-          timestamp: new Date()
-        }
-      ];
-      
-      await Annotation.insertMany(sampleAnnotations);
-      console.log('  ✅ Sample annotations created');
-    } else {
-      console.log('  ℹ️  Annotations collection already has data, skipping...');
-    }
+    // No separate annotations collection anymore
     
   } catch (error) {
     console.error('❌ Error inserting sample data:', error);

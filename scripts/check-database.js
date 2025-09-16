@@ -7,7 +7,7 @@
 
 require('dotenv').config();
 const mongoose = require('mongoose');
-const { User, Contract, Annotation } = require('../models');
+const { User, Contract } = require('../models');
 
 const checkDatabase = async () => {
   try {
@@ -53,7 +53,7 @@ const checkCollections = async () => {
     const collections = await db.listCollections().toArray();
     const collectionNames = collections.map(col => col.name);
     
-    const requiredCollections = ['users', 'contracts', 'annotations'];
+    const requiredCollections = ['users', 'contracts'];
     
     for (const collectionName of requiredCollections) {
       if (collectionNames.includes(collectionName)) {
@@ -81,9 +81,7 @@ const checkData = async () => {
     const contractCount = await Contract.countDocuments();
     console.log(`  📄 Contracts: ${contractCount} documents`);
     
-    // Check annotations
-    const annotationCount = await Annotation.countDocuments();
-    console.log(`  📝 Annotations: ${annotationCount} documents`);
+    // No separate annotations collection anymore
     
     // Check indexes
     await checkIndexes();
@@ -108,9 +106,7 @@ const checkIndexes = async () => {
     const contractIndexes = await db.collection('contracts').indexes();
     console.log(`  📄 Contracts indexes: ${contractIndexes.length} indexes`);
     
-    // Check annotations indexes
-    const annotationIndexes = await db.collection('annotations').indexes();
-    console.log(`  📝 Annotations indexes: ${annotationIndexes.length} indexes`);
+    // No separate annotations collection anymore
     
   } catch (error) {
     console.error('❌ Error checking indexes:', error);

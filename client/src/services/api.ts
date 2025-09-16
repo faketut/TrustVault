@@ -44,7 +44,7 @@ export const authAPI = {
   
   // Phone number authentication
   sendVerificationCode: (phoneNumber: string) => api.post('/auth/phone/send-code', { phoneNumber }),
-  verifyPhoneCode: (data: { phoneNumber: string; verificationCode: string; nickname: string }) => 
+  verifyPhoneCode: (data: { phoneNumber: string; verificationCode: string }) => 
     api.post('/auth/phone/verify', data),
   
   // Apple Sign-In authentication
@@ -60,13 +60,23 @@ export const authAPI = {
   getStats: () => api.get('/auth/stats'),
 };
 
+// Types and helpers for contract API
+type BulkDeleteResult = { succeeded: string[]; failed: { id: string; error: any }[] };
+type DeleteListFn = (contractIds: string[]) => Promise<BulkDeleteResult>;
+
+const deleteContracts: DeleteListFn = async (contractIds) => {
+  const { data } = await api.post('/consent-contracts/bulk-delete', { contractIds });
+  return data as BulkDeleteResult;
+};
+
 export const contractAPI = {
   create: (contractData: any) => api.post('/consent-contracts', contractData),
   getAll: () => api.get('/consent-contracts'),
-  giveInitialConsent: (contractId: string) => api.post(`/consent-contracts/${contractId}/initial-consent`),
-  giveOngoingConsent: (contractId: string) => api.post(`/consent-contracts/${contractId}/ongoing-consent`),
+  giveConsent: (contractId: string) => api.post(`/consent-contracts/${contractId}/consent`),
   revoke: (contractId: string) => api.post(`/consent-contracts/${contractId}/revoke`),
   delete: (contractId: string) => api.delete(`/consent-contracts/${contractId}`),
+  // Bulk delete helper (client-side): deletes contracts in parallel
+  deleteList: deleteContracts,
   annotate: (contractId: string, annotation: any) => api.post(`/consent-contracts/${contractId}/annotate`, annotation),
   getMyContracts: () => api.get('/consent-contracts/my-contracts'),
   getContract: (contractId: string) => api.get(`/consent-contracts/${contractId}`),

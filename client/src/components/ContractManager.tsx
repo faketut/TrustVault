@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import api, { contractAPI } from '../services/api';
 import { generateContractQRCodeDataUrl } from '../vendor/qrCodeGen';
 import { Contract, User } from '../utils/types';
+import styles from './ContractManager.module.css';
 
 interface ContractManagerProps {
   contracts: Contract[];
@@ -28,6 +29,9 @@ const ContractManager: React.FC<ContractManagerProps> = ({
   const [error, setError] = useState('');
   const [selectedContract, setSelectedContract] = useState<Contract | null>(null);
   const [qrUrl, setQrUrl] = useState<string>('');
+  const [showAuthorizeModal, setShowAuthorizeModal] = useState(false);
+  const [lawyerIdInput, setLawyerIdInput] = useState('');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const filterAndSortContracts = useCallback(() => {
     let filtered = [...contracts];
@@ -76,6 +80,45 @@ const ContractManager: React.FC<ContractManagerProps> = ({
     }
   };
 
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const selectAllFiltered = () => {
+    setSelectedIds(new Set(filteredContracts.map(c => c.contractId)));
+  };
+
+  const clearSelection = () => setSelectedIds(new Set());
+
+  const deleteSelected = async () => {
+    if (selectedIds.size === 0) return;
+    if (!window.confirm(`Delete ${selectedIds.size} contract(s)? Only non-active can be deleted.`)) return;
+    setLoading(true);
+    setError('');
+    try {
+      const { succeeded, failed } = await contractAPI.deleteList(Array.from(selectedIds));
+      if (failed.length) {
+        setError(`${failed.length} failed. Some may be active or unauthorized.`);
+      }
+      if (succeeded.length) {
+        succeeded.forEach(id => onContractDeleted(id));
+      }
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        succeeded.forEach(id => next.delete(id));
+        return next;
+      });
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Bulk delete failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleRevoke = async (contract: Contract) => {
     if (!window.confirm('Are you sure you want to revoke this contract?')) {
       return;
@@ -107,6 +150,32 @@ const ContractManager: React.FC<ContractManagerProps> = ({
       onContractDeleted(contract.contractId);
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to delete contract');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAuthorize = async (contract: Contract) => {
+    setSelectedContract(contract);
+    setLawyerIdInput('');
+    setShowAuthorizeModal(true);
+  };
+
+  const submitAuthorize = async () => {
+    if (!selectedContract || !lawyerIdInput.trim()) return;
+    setLoading(true);
+    setError('');
+    try {
+      await contractAPI.annotate(selectedContract.contractId, {}); // noop to ensure import
+    } catch {}
+    try {
+      const res = await (await import('../services/api')).default.post(`/consent-contracts/${selectedContract.contractId}/authorize-lawyer`, { lawyerId: lawyerIdInput.trim() });
+      // Update local authorized list if present
+      const updated = { ...selectedContract, authorizedLawyers: res.data.authorizedLawyers } as Contract;
+      onContractUpdated(updated);
+      setShowAuthorizeModal(false);
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to authorize lawyer');
     } finally {
       setLoading(false);
     }
@@ -153,7 +222,7 @@ const ContractManager: React.FC<ContractManagerProps> = ({
               cursor: 'pointer'
             }}
           >
-            ← Back to Contract List
+            Back to Contract List
           </button>
         </div>
 
@@ -164,19 +233,12 @@ const ContractManager: React.FC<ContractManagerProps> = ({
           marginBottom: '20px'
         }}>
           <h2 style={{ margin: '0 0 20px 0' }}>Contract Details</h2>
-          
-          <div style={{ 
-            display: 'grid', 
-            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
-            gap: '20px',
-            marginBottom: '20px'
-          }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr', columnGap: '20px', rowGap: '10px' }}>
+            <div style={{ fontWeight: 'bold' }}>Contract ID:</div>
+            <div style={{ fontFamily: 'monospace' }}>{selectedContract.contractId}</div>
+
+            <div style={{ fontWeight: 'bold' }}>Status:</div>
             <div>
-              <strong>Contract ID:</strong><br />
-              {selectedContract.contractId}
-            </div>
-            <div>
-              <strong>Status:</strong><br />
               <span style={{
                 padding: '4px 8px',
                 borderRadius: '4px',
@@ -186,23 +248,47 @@ const ContractManager: React.FC<ContractManagerProps> = ({
                 {selectedContract.status.toUpperCase()}
               </span>
             </div>
-            <div>
-              <strong>Start Time:</strong><br />
-              {formatDateTime(selectedContract.startDateTime)}
-            </div>
-            <div>
-              <strong>End Time:</strong><br />
-              {formatDateTime(selectedContract.endDateTime)}
-            </div>
-            {selectedContract.revokedBy && (
-              <div>
-                <strong>Revoked By:</strong><br />
-                {selectedContract.revokedBy}
-              </div>
-            )}
-          </div>
 
-          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+            <div style={{ fontWeight: 'bold' }}>Start Time:</div>
+            <div>{formatDateTime(selectedContract.startDateTime)}</div>
+
+            <div style={{ fontWeight: 'bold' }}>End Time:</div>
+            <div>{formatDateTime(selectedContract.endDateTime)}</div>
+
+            <div style={{ fontWeight: 'bold' }}>Revoked By:</div>
+            <div>{selectedContract.revokedBy || '—'}</div>
+
+            <div style={{ fontWeight: 'bold' }}>Authorized By:</div>
+            <div>{selectedContract.authorizedBy || '—'}</div>
+
+            <div style={{ fontWeight: 'bold' }}>Authorized Lawyers:</div>
+            <div>{(selectedContract.authorizedLawyers && selectedContract.authorizedLawyers.length)
+              ? selectedContract.authorizedLawyers.join(', ')
+              : '—'}</div>
+
+            <div style={{ fontWeight: 'bold' }}>Annotation:</div>
+            <div>{selectedContract.annotation || '—'}</div>
+
+            <div style={{ fontWeight: 'bold' }}>Last Updated:</div>
+            <div>{selectedContract.updatedAt ? new Date(selectedContract.updatedAt as any).toLocaleString() : '—'}</div>
+          </div>
+          
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '10px' }}>
+            <button
+              onClick={() => handleDelete(selectedContract)}
+              disabled={loading}
+              style={{
+                padding: '10px 20px',
+                backgroundColor: '#6c757d',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: loading ? 'not-allowed' : 'pointer'
+              }}
+            >
+              {loading ? 'Processing...' : 'Delete Contract'}
+            </button>
+
             {selectedContract.status === 'active' && (
               <button
                 onClick={() => handleRevoke(selectedContract)}
@@ -219,21 +305,6 @@ const ContractManager: React.FC<ContractManagerProps> = ({
                 {loading ? 'Processing...' : 'Revoke Contract'}
               </button>
             )}
-
-            <button
-              onClick={() => handleDelete(selectedContract)}
-              disabled={loading}
-              style={{
-                padding: '10px 20px',
-                backgroundColor: '#6c757d',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: loading ? 'not-allowed' : 'pointer'
-              }}
-            >
-              {loading ? 'Processing...' : 'Delete Contract'}
-            </button>
           </div>
         </div>
       </div>
@@ -241,17 +312,12 @@ const ContractManager: React.FC<ContractManagerProps> = ({
   }
 
   return (
-    <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '20px' }}>
-      <h2 style={{ marginBottom: '20px' }}>Contract Management</h2>
+    <div className={styles.container}>
+      <h2 className={styles.title}>Contract Management</h2>
       
       {/* Filters and Search */}
-      <div style={{ 
-        backgroundColor: '#f8f9fa', 
-        padding: '20px', 
-        borderRadius: '8px',
-        marginBottom: '20px'
-      }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '15px' }}>
+      <div className={styles.panel}>
+        <div className={styles.filters}>
           <div>
             <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>Search:</label>
             <input
@@ -259,12 +325,7 @@ const ContractManager: React.FC<ContractManagerProps> = ({
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Search by contract ID or status..."
-              style={{ 
-                width: '100%', 
-                padding: '8px', 
-                border: '1px solid #ccc', 
-                borderRadius: '4px' 
-              }}
+              className={styles.input}
             />
           </div>
           
@@ -273,18 +334,24 @@ const ContractManager: React.FC<ContractManagerProps> = ({
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              style={{ 
-                width: '100%', 
-                padding: '8px', 
-                border: '1px solid #ccc', 
-                borderRadius: '4px' 
-              }}
+              className={styles.input}
             >
               <option value="all">All Statuses</option>
               <option value="inactive">Inactive</option>
               <option value="active">Active</option>
               <option value="revoked">Revoked</option>
             </select>
+          </div>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'end' }}>
+            <button onClick={selectAllFiltered} className={`${styles.btn} ${styles.btnSecondary}`}>
+              Select All
+            </button>
+            <button onClick={clearSelection} className={`${styles.btn} ${styles.btnSecondary}`}>
+              Clear
+            </button>
+            <button onClick={deleteSelected} disabled={loading || selectedIds.size === 0} className={`${styles.btn} ${styles.btnDanger}`}>
+              Delete All ({selectedIds.size})
+            </button>
           </div>
         </div>
       </div>
@@ -302,22 +369,12 @@ const ContractManager: React.FC<ContractManagerProps> = ({
       )}
 
       {/* Contracts Table */}
-      <div style={{ 
-        backgroundColor: 'white', 
-        border: '1px solid #dee2e6', 
-        borderRadius: '8px',
-        overflow: 'hidden'
-      }}>
-        <div style={{ 
-          backgroundColor: '#f8f9fa', 
-          padding: '15px', 
-          borderBottom: '1px solid #dee2e6',
-          display: 'grid',
-          gridTemplateColumns: '1fr 100px 150px 150px 200px',
-          gap: '15px',
-          alignItems: 'center',
-          fontWeight: 'bold'
-        }}>
+      <div className={styles.table}>
+        <div className={styles.thead}>
+          <div>
+            <input type="checkbox" checked={filteredContracts.length > 0 && filteredContracts.every(c => selectedIds.has(c.contractId))}
+              onChange={(e) => e.target.checked ? selectAllFiltered() : clearSelection()} />
+          </div>
           <div 
             style={{ cursor: 'pointer', userSelect: 'none' }}
             onClick={() => handleSort('contractId')}
@@ -332,6 +389,7 @@ const ContractManager: React.FC<ContractManagerProps> = ({
           </div>
           <div>Details</div>
           <div>QR code</div>
+          <div>Actions</div>
         </div>
 
         {filteredContracts.length === 0 ? (
@@ -340,72 +398,40 @@ const ContractManager: React.FC<ContractManagerProps> = ({
           </div>
         ) : (
           filteredContracts.map((contract, index) => (
-            <div
-              key={contract.contractId}
-              style={{
-                padding: '15px',
-                borderBottom: index < filteredContracts.length - 1 ? '1px solid #dee2e6' : 'none',
-                display: 'grid',
-                gridTemplateColumns: '1fr 100px 150px 150px 200px',
-                gap: '15px',
-                alignItems: 'center',
-                backgroundColor: index % 2 === 0 ? 'white' : '#f8f9fa'
-              }}
-            >
-              <div style={{ fontFamily: 'monospace', fontSize: '12px' }}>
+            <div key={contract.contractId} className={`${styles.row} ${index % 2 === 1 ? styles.rowAlt : ''}`}>
+              <div>
+                <input type="checkbox" checked={selectedIds.has(contract.contractId)} onChange={() => toggleSelect(contract.contractId)} />
+              </div>
+              <div className={styles.mono}>
                 {contract.contractId}
               </div>
               
               <div>
-                <span style={{
-                  padding: '4px 8px',
-                  borderRadius: '4px',
-                  backgroundColor: getStatusBackground(contract.status),
-                  color: getStatusColor(contract.status),
-                  fontSize: '12px',
-                  fontWeight: 'bold'
-                }}>
+                <span className={`${styles.badge} ${contract.status === 'active' ? styles.badgeActive : contract.status === 'inactive' ? styles.badgeInactive : styles.badgeRevoked}`}>
                   {contract.status.toUpperCase()}
                 </span>
               </div>
               
               <div>
-                <button
-                  onClick={() => handleViewDetails(contract)}
-                  style={{
-                    padding: '4px 8px',
-                    backgroundColor: '#007bff',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '3px',
-                    cursor: 'pointer',
-                    fontSize: '11px'
-                  }}
-                >
+                <button onClick={() => handleViewDetails(contract)} className={`${styles.btn} ${styles.btnPrimary}`}>
                   Details
                 </button>
               </div>
 
               <div>
-                <button
-                  onClick={() => {
+                <button onClick={() => {
                     const base = (api as any).defaults.baseURL as string;
                     const apiBase = base.replace(/\/api\/?$/, '');
                     const content = `${apiBase}/contracts/${contract.contractId}`;
                     const dataUrl = generateContractQRCodeDataUrl(content);
                     setQrUrl(dataUrl);
-                  }}
-                  style={{
-                    padding: '4px 8px',
-                    backgroundColor: '#28a745',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '3px',
-                    cursor: 'pointer',
-                    fontSize: '11px'
-                  }}
-                >
+                  }} className={`${styles.btn} ${styles.btnSuccess}`}>
                   QR code
+                </button>
+              </div>
+              <div>
+                <button onClick={() => handleAuthorize(contract)} className={`${styles.btn} ${styles.btnWarning}`}>
+                  Authorize
                 </button>
               </div>
             </div>
@@ -414,13 +440,7 @@ const ContractManager: React.FC<ContractManagerProps> = ({
       </div>
 
       {/* Summary */}
-      <div style={{ 
-        marginTop: '20px', 
-        padding: '15px', 
-        backgroundColor: '#e9ecef', 
-        borderRadius: '4px',
-        fontSize: '14px'
-      }}>
+      <div className={styles.summary}>
         <strong>Total Contracts:</strong> {contracts.length} | 
         <strong> Filtered:</strong> {filteredContracts.length} | 
         <strong> Active:</strong> {contracts.filter(c => c.status === 'active').length} | 
@@ -429,30 +449,37 @@ const ContractManager: React.FC<ContractManagerProps> = ({
       </div>
 
       {qrUrl && (
-        <div
-          onClick={() => setQrUrl('')}
-          style={{
-            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-            backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex',
-            alignItems: 'center', justifyContent: 'center', zIndex: 1000
-          }}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{ background: 'white', padding: 20, borderRadius: 8, textAlign: 'center' }}
-          >
+        <div onClick={() => setQrUrl('')} className={styles.qrModalBackdrop}>
+          <div onClick={(e) => e.stopPropagation()} className={styles.qrModal}>
             <h3 style={{ marginTop: 0 }}>Contract QR Code</h3>
             <object data={qrUrl} type="image/svg+xml" style={{ width: 260, height: 260 }}>
               <img src={qrUrl} alt="QR Code" style={{ width: 260, height: 260 }} />
             </object>
-            <div style={{ marginTop: 12, display: 'flex', gap: 8, justifyContent: 'center' }}>
-              <a href={qrUrl} download target="_blank" rel="noreferrer" style={{
-                padding: '6px 12px', backgroundColor: '#17a2b8', color: 'white',
-                textDecoration: 'none', borderRadius: 4
-              }}>Download SVG</a>
-              <button onClick={() => setQrUrl('')} style={{
-                padding: '6px 12px', backgroundColor: '#6c757d', color: 'white', border: 'none', borderRadius: 4
-              }}>Close</button>
+            <div className={styles.actions} style={{ marginTop: 12 }}>
+              <a href={qrUrl} download target="_blank" rel="noreferrer" className={`${styles.btn} ${styles.btnInfo}`}>Download SVG</a>
+              <button onClick={() => setQrUrl('')} className={`${styles.btn} ${styles.btnSecondary}`}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showAuthorizeModal && selectedContract && (
+        <div
+          onClick={() => setShowAuthorizeModal(false)}
+          style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}
+        >
+          <div onClick={(e) => e.stopPropagation()} style={{ background: 'white', padding: 20, borderRadius: 8, width: 400 }}>
+            <h3 style={{ marginTop: 0 }}>Authorize Lawyer</h3>
+            <p style={{ fontSize: 14, color: '#555' }}>Enter a lawyer's user ID to grant them access to view and annotate this contract.</p>
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ display: 'block', marginBottom: 6, fontWeight: 'bold' }}>Lawyer User ID</label>
+              <input value={lawyerIdInput} onChange={(e) => setLawyerIdInput(e.target.value)} placeholder="lawyer_user_id" style={{ width: '100%', padding: 8, border: '1px solid #ccc', borderRadius: 4 }} />
+            </div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button onClick={() => setShowAuthorizeModal(false)} style={{ padding: '8px 12px', background: '#6c757d', color: 'white', border: 'none', borderRadius: 4 }}>Cancel</button>
+              <button onClick={submitAuthorize} disabled={loading || !lawyerIdInput.trim()} style={{ padding: '8px 12px', background: '#007bff', color: 'white', border: 'none', borderRadius: 4 }}>
+                {loading ? 'Authorizing...' : 'Authorize'}
+              </button>
             </div>
           </div>
         </div>

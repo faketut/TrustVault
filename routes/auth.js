@@ -8,6 +8,7 @@ const SMS_SERVICE = require('../services/smsService');
 
 const router = express.Router();
 
+
 // WeChat OAuth2.0 Step 2: Exchange code for access_token
 router.post('/wechat/callback', async (req, res) => {
   try {
@@ -92,7 +93,10 @@ router.post('/wechat/callback', async (req, res) => {
     res.json({
       user: { 
         id: user._id, 
+        userId: user._id, // prefer DB id for matching
         socialMediaId: user.socialMediaId,
+        phoneNumber: user.phoneNumber,
+        appleId: user.appleId,
         platform: user.platform,
         nickname: user.nickname, 
         avatar: user.avatar,
@@ -226,8 +230,8 @@ router.post('/phone/verify', async (req, res) => {
   try {
     const { phoneNumber, verificationCode, nickname } = req.body;
     
-    if (!phoneNumber || !verificationCode || !nickname) {
-      return res.status(400).json({ error: 'Phone number, verification code, and nickname are required' });
+    if (!phoneNumber || !verificationCode) {
+      return res.status(400).json({ error: 'Phone number and verification code are required' });
     }
 
     // Validate verification code format
@@ -235,10 +239,7 @@ router.post('/phone/verify', async (req, res) => {
       return res.status(400).json({ error: 'Verification code must be 6 digits' });
     }
 
-    // Validate nickname
-    if (nickname.trim().length < 2) {
-      return res.status(400).json({ error: 'Nickname must be at least 2 characters long' });
-    }
+    // Nickname no longer required
 
     // Find user by phone number
     const user = await User.findOne({ phoneNumber, platform: 'phone' });
@@ -260,7 +261,7 @@ router.post('/phone/verify', async (req, res) => {
     }
 
     // Update user with verified status and nickname
-    user.nickname = nickname;
+    if (nickname) user.nickname = nickname;
     user.phoneVerification.isVerified = true;
     user.phoneVerification.verificationCode = undefined; // Clear the code
     user.phoneVerification.attempts = 0;
@@ -282,7 +283,10 @@ router.post('/phone/verify', async (req, res) => {
     res.json({
       user: { 
         id: user._id, 
+        userId: user._id,
         phoneNumber: user.phoneNumber,
+        socialMediaId: user.socialMediaId,
+        appleId: user.appleId,
         platform: user.platform,
         nickname: user.nickname, 
         avatar: user.avatar,
@@ -369,7 +373,10 @@ router.post('/apple/login', async (req, res) => {
     res.json({
       user: { 
         id: user._id, 
+        userId: user._id,
         appleId: user.appleId,
+        socialMediaId: user.socialMediaId,
+        phoneNumber: user.phoneNumber,
         platform: user.platform,
         nickname: user.nickname, 
         avatar: user.avatar,
@@ -389,7 +396,7 @@ router.post('/social-login', async (req, res) => {
     const { socialMediaId, platform, nickname, avatar, role = 'user' } = req.body;
     
     // Validate required fields
-    if (!socialMediaId || !platform || !nickname) {
+    if (!socialMediaId || !platform) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
     
@@ -421,7 +428,10 @@ router.post('/social-login', async (req, res) => {
     res.json({
       user: { 
         id: user._id, 
+        userId: user._id,
         socialMediaId: user.socialMediaId,
+        phoneNumber: user.phoneNumber,
+        appleId: user.appleId,
         platform: user.platform,
         nickname: user.nickname, 
         avatar: user.avatar,
@@ -475,45 +485,33 @@ router.get('/profile', authMiddleware, async (req, res) => {
   }
 });
 
-// Update user profile
-router.put('/profile', authMiddleware, async (req, res) => {
-  try {
-    const { nickname, avatar } = req.body;
-    
-    const updateData = {};
-    if (nickname) updateData.nickname = nickname;
-    if (avatar) updateData.avatar = avatar;
-    
-    await User.updateOne({ _id: req.user._id }, updateData);
-    res.json({ message: 'Profile updated successfully' });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to update profile' });
-  }
-});
 
 // Get user contracts count
 router.get('/stats', authMiddleware, async (req, res) => {
   try {
     const { Contract } = require('../models');
-    
+    const uid = (req.user?._id || req.user.userId)?.toString();
     const totalContracts = await Contract.countDocuments({
-      $or: [{ partyAId: req.user.socialMediaId }, { partyBId: req.user.socialMediaId }]
+      $or: [{ partyAId: uid }, { partyBId: uid }, { authorizedBy: uid }]
     });
-    
     const activeContracts = await Contract.countDocuments({
-      $or: [{ partyAId: req.user.socialMediaId }, { partyBId: req.user.socialMediaId }],
+      $or: [{ partyAId: uid }, { partyBId: uid }, { authorizedBy: uid }],
       status: 'active'
     });
-    
     const revokedContracts = await Contract.countDocuments({
-      $or: [{ partyAId: req.user.socialMediaId }, { partyBId: req.user.socialMediaId }],
+      $or: [{ partyAId: uid }, { partyBId: uid }, { authorizedBy: uid }],
       status: 'revoked'
+    });
+    const invalidContracts = await Contract.countDocuments({
+      $or: [{ partyAId: uid }, { partyBId: uid }, { authorizedBy: uid }],
+      status: 'invalid'
     });
     
     res.json({
       totalContracts,
       activeContracts,
-      revokedContracts
+      revokedContracts,
+      invalidContracts
     });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch user stats' });

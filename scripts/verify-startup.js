@@ -9,7 +9,7 @@
 
 require('dotenv').config();
 const mongoose = require('mongoose');
-const { User, Contract, Annotation } = require('../models');
+const { User, Contract } = require('../models');
 
 const verifyStartup = async () => {
   try {
@@ -35,7 +35,7 @@ const verifyStartup = async () => {
     const collections = await db.listCollections().toArray();
     const collectionNames = collections.map(col => col.name);
     
-    const requiredCollections = ['users', 'contracts', 'annotations'];
+    const requiredCollections = ['users', 'contracts'];
     const missingCollections = requiredCollections.filter(name => !collectionNames.includes(name));
     
     if (missingCollections.length > 0) {
@@ -62,11 +62,10 @@ const verifyStartup = async () => {
     console.log('\n4️⃣  Checking Sample Data...');
     const userCount = await User.countDocuments();
     const contractCount = await Contract.countDocuments();
-    const annotationCount = await Annotation.countDocuments();
     
     console.log(`👤 Users: ${userCount}`);
     console.log(`📄 Contracts: ${contractCount}`);
-    console.log(`📝 Annotations: ${annotationCount}`);
+    console.log(`📝 Annotations: integrated on Contract`);
 
     // Step 5: Test basic operations
     console.log('\n5️⃣  Testing Basic Operations...');
@@ -94,19 +93,12 @@ const verifyStartup = async () => {
     console.log('✅ Contract creation test passed');
     
     // Test annotation creation
-    const testAnnotation = new Annotation({
-      contractId: testContract.contractId,
-      lawyerId: testUser.socialMediaId,
-      note: 'Test annotation',
-      severity: 'info'
-    });
-    await testAnnotation.save();
-    console.log('✅ Annotation creation test passed');
+    console.log('✅ Annotation model removed - skipped annotation creation test');
 
     // Clean up test data
     await User.deleteOne({ _id: testUser._id });
     await Contract.deleteOne({ _id: testContract._id });
-    await Annotation.deleteOne({ _id: testAnnotation._id });
+    // No annotation cleanup necessary
     console.log('🧹 Test data cleaned up');
 
     // Step 6: Verify schema validation

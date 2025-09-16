@@ -12,6 +12,7 @@
     "init-db": "node scripts/init-database.js",
     "check-db": "node scripts/check-database.js",
     "verify-startup": "node scripts/verify-startup.js",
+    "drop-db": "node scripts/drop-database.js",
     "test": "node test/run-all-tests.js",
     "test-login": "node test/test-login-logic.js",
     "test-auth": "node test/test-auth.js",

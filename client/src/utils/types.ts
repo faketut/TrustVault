@@ -1,8 +1,8 @@
 // Type definitions for the Sex Consent Contract Management System
 
 export interface User {
-  id: string;
-  socialMediaId?: string; // WeChat, QQ, Weibo ID
+  id: string; // contract party id
+  socialMediaId?: string; // WeChat ID for WeChat auth 
   phoneNumber?: string; // Phone number for SMS auth
   appleId?: string; // Apple ID for Apple Sign-In
   platform: 'wechat' | 'apple' | 'phone';
@@ -42,10 +42,14 @@ export interface User {
 
 export interface Contract {
   contractId: string; // Unique contract identifier
-  status: 'inactive' | 'active' | 'revoked';
+  status: 'inactive' | 'active' | 'revoked' | 'invalid';
   revokedBy?: string; // Social media ID of the party who revoked the contract
   startDateTime: string; // Contract start date and time
   endDateTime: string; // Contract end date and time
+  authorizedLawyers?: string[];
+  authorizedBy?: string | null;
+  annotation?: string;
+  updatedAt?: Date;
 }
 
 export interface Consent {
@@ -59,13 +63,17 @@ export interface AuthResponse {
   token: string;
 }
 
-// Helper function to get user's display identifier
-export const getUserDisplayId = (user: User): string => {
-  // Priority order: socialMediaId, phoneNumber, appleId, id
-  return user.socialMediaId || user.phoneNumber || user.appleId || user.id;
+// Helper function to get user's id
+export const getUserId = (user: User): string => {
+  return user.id;
 };
 
 // Helper function to get user's display name
 export const getUserDisplayName = (user: User): string => {
   return 'anonymous';
+};
+
+// Backward-compat helper for existing imports
+export const getUserDisplayId = (user: User): string => {
+  return user.id;
 };

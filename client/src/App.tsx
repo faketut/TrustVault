@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import LoginForm from './components/LoginForm';
 import Dashboard from './components/Dashboard';
+import ContractLanding from './components/ContractLanding';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { User, getUserDisplayId } from './utils/types';
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const location = useLocation();
 
   useEffect(() => {
     // Check if user is already logged in
@@ -72,30 +75,8 @@ function App() {
     );
   }
 
-  if (!user) {
-    return (
-      <div style={{ 
-        minHeight: '100vh', 
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center'
-      }}>
-        <div style={{ 
-          backgroundColor: 'white', 
-          borderRadius: '8px', 
-          boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-          padding: '40px'
-        }}>
-          <LoginForm onLogin={handleLogin} />
-        </div>
-      </div>
-    );
-  }
-
-  return (
+  const Shell: React.FC<{ children: React.ReactNode }> = ({ children }) => (
     <div style={{ minHeight: '100vh', backgroundColor: '#f5f5f5' }}>
-      {/* Navigation */}
       <nav style={{ 
         backgroundColor: '#1976d2', 
         color: 'white', 
@@ -112,34 +93,72 @@ function App() {
           <h1 style={{ margin: 0, fontSize: '1.5rem' }}>
             Sex Consent Contract Management
           </h1>
-          
-          <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-            <div style={{ marginLeft: '1rem' }}>
-              <span>Welcome, {getUserDisplayId(user)} ({user.role})</span>
-              <button
-                onClick={handleLogout}
-                style={{
-                  marginLeft: '1rem',
-                  padding: '0.5rem 1rem',
-                  backgroundColor: '#dc004e',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer'
-                }}
-              >
-                Logout
-              </button>
+          {user && (
+            <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+              <div style={{ marginLeft: '1rem' }}>
+                <span>Welcome, {getUserDisplayId(user)} ({user.role})</span>
+                <button
+                  onClick={handleLogout}
+                  style={{
+                    marginLeft: '1rem',
+                    padding: '0.5rem 1rem',
+                    backgroundColor: '#dc004e',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Logout
+                </button>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </nav>
-
-      {/* Main Content */}
-      <main>
-        <Dashboard user={user} onLogout={handleLogout} />
-      </main>
+      <main>{children}</main>
     </div>
+  );
+
+  return (
+    <Routes>
+      <Route path="/contracts/:id" element={<Shell><ContractLanding /></Shell>} />
+      <Route path="/login" element={
+        user ? <Navigate to={localStorage.getItem('postLoginRedirect') || '/'} replace /> : (
+          <div style={{ 
+            minHeight: '100vh', 
+            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}>
+            <div style={{ 
+              backgroundColor: 'white', 
+              borderRadius: '8px', 
+              boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+              padding: '40px'
+            }}>
+              <LoginForm onLogin={(u, t) => {
+                handleLogin(u, t);
+                const redirect = localStorage.getItem('postLoginRedirect');
+                if (redirect) {
+                  localStorage.removeItem('postLoginRedirect');
+                  window.location.replace(redirect);
+                }
+              }} />
+            </div>
+          </div>
+        )
+      } />
+      <Route path="/" element={
+        user ? (
+          <Shell><Dashboard user={user} onLogout={handleLogout} /></Shell>
+        ) : (
+          <Navigate to="/login" replace state={{ from: location }} />
+        )
+      } />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
   );
 }
 

@@ -1,0 +1,17 @@
+.container { padding: 20px; }
+.header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
+.btn { padding: 8px 16px; color: white; border: none; border-radius: 4px; cursor: pointer; }
+.btnPrimary { background-color: #1976d2; }
+.btnDanger { background-color: #dc004e; }
+.btnInfo { background-color: #17a2b8; }
+.card { border: 1px solid #ddd; border-radius: 8px; padding: 20px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+.recentItem { padding: 15px; border: 1px solid #eee; border-radius: 4px; margin-bottom: 10px; cursor: pointer; transition: background-color 0.2s; }
+.statusBadge { padding: 2px 8px; border-radius: 12px; color: white; font-size: 12px; }
+.statusActive { background-color: #4caf50; }
+.statusInactive { background-color: #ff9800; }
+.statusRevoked { background-color: #f44336; }
+.qrBackdrop { position: fixed; inset: 0; background-color: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+.qrModal { background-color: white; padding: 30px; border-radius: 8px; max-width: 500px; width: 90%; max-height: 90%; overflow: auto; text-align: center; }
+.qrActions { display: flex; gap: 10px; justify-content: center; }
+

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { contractAPI } from '../services/api';
-import { Contract, User, getUserDisplayId } from '../utils/types';
+import { Contract, User, getUserId } from '../utils/types';
 
 interface ContractCreatorProps {
   user: User;
@@ -31,7 +31,7 @@ const ContractCreator: React.FC<ContractCreatorProps> = ({ user, onContractCreat
     try {
       // Create contract data with user's display ID as partyAId
       const contractPayload = {
-        partyAId: getUserDisplayId(user),
+        partyAId: getUserId(user),
         ...contractData
       };
       

@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 
 // User Schema - Multi-platform authentication
 const userSchema = new mongoose.Schema({
-  // Primary identifier - can be socialMediaId, phoneNumber, or appleId
+
   socialMediaId: String, // WeChat, QQ, Weibo ID
   phoneNumber: String, // Phone number for SMS auth
   appleId: String, // Apple ID for Apple Sign-In
@@ -60,6 +60,26 @@ const userSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 });
 
+// Virtual/computed field: userId (encrypted identifier)
+userSchema.add({ userId: { type: String } });
+
+function computeUserId(doc) {
+  const concat = `${doc.socialMediaId || ''}|${doc.phoneNumber || ''}|${doc.appleId || ''}`;
+  // stoi-like: sum of char codes
+  let sum = 0;
+  for (let i = 0; i < concat.length; i++) sum += concat.charCodeAt(i);
+  // Simple reversible obfuscation (XOR + base36) - placeholder for encryption
+  const mixed = (sum ^ 0x5a5a5a5) >>> 0;
+  return mixed.toString(36);
+}
+
+userSchema.pre('save', function(next) {
+  if (!this.userId) {
+    this.userId = computeUserId(this);
+  }
+  next();
+});
+
 // Contract Schema - Simplified contract structure
 const contractSchema = new mongoose.Schema({
   contractId: { type: String, unique: true, required: true }, // Unique contract identifier
@@ -69,31 +89,21 @@ const contractSchema = new mongoose.Schema({
   endDateTime: { type: Date, required: true },
   status: { 
     type: String, 
-    enum: ['inactive', 'active', 'revoked'], 
+    enum: ['inactive', 'active', 'revoked', 'invalid'], 
     default: 'inactive' 
   },
-});
-
-// Annotation Schema - Lawyer annotations
-const annotationSchema = new mongoose.Schema({
-  contractId: { type: String, required: true },
-  lawyerId: { type: String, required: true },
-  note: { type: String, required: true },
-  severity: { 
-    type: String, 
-    enum: ['info', 'warning', 'critical'], 
-    default: 'info' 
-  },
-  timestamp: { type: Date, default: Date.now }
+  // Lawyer access control
+  authorizedLawyers: { type: [String], default: [] }, // list of lawyer user IDs allowed to view/annotate
+  authorizedBy: { type: String, default: null }, // user ID of the party who authorized last
+  // Direct annotation text stored on the contract
+  annotation: { type: String, default: '' }
 });
 
 // Create and export models
 const User = mongoose.model('User', userSchema);
 const Contract = mongoose.model('Contract', contractSchema);
-const Annotation = mongoose.model('Annotation', annotationSchema);
 
 module.exports = {
   User,
-  Contract,
-  Annotation
+  Contract
 };

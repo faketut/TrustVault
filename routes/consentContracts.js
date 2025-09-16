@@ -1,15 +1,23 @@
 // routes/consentContracts.js - Contract management routes
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
-const { Contract, User, Annotation } = require('../models');
+const { Contract, User } = require('../models');
 const { authMiddleware, requireRole } = require('../middleware/auth');
 
 const router = express.Router();
 
+// Small async wrapper to reduce try/catch boilerplate
+const asyncHandler = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+
+// Helper: the ONLY identifier is the database id string
+function getUserId(user) {
+  return user?._id?.toString?.() || '';
+}
+
+
 // Create contract
-router.post('/', authMiddleware, async (req, res) => {
-  try {
-    const { partyAId, startDateTime, endDateTime } = req.body;
+router.post('/', authMiddleware, asyncHandler(async (req, res) => {
+    const { startDateTime, endDateTime } = req.body;
     
     // Validate required fields
     if (!startDateTime || !endDateTime) {
@@ -21,143 +29,59 @@ router.post('/', authMiddleware, async (req, res) => {
     
     const contract = new Contract({
       contractId,
-      partyAId: partyAId || req.user.socialMediaId, // Use provided partyAId or fallback to user's socialMediaId
+      partyAId: getUserId(req.user), // Always store Party A as user's DB id string
       partyBId: 'pending', // Will be set when party B signs the contract
       startDateTime: new Date(startDateTime),
       endDateTime: new Date(endDateTime),
-      status: 'inactive'
+      status: 'inactive',
+      updatedAt: new Date()
     });
     
     await contract.save();
     res.json(contract);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to create contract' });
-  }
-});
+}));
 
-// List all contracts (admin/lawyer can view all; regular users will also see all per request)
-router.get('/', authMiddleware, async (req, res) => {
-  try {
-    const contracts = await Contract.find({}).sort({ createdAt: -1 });
+// List contracts - users can only view contracts where they are Party A
+router.get('/', authMiddleware, asyncHandler(async (req, res) => {
+    const uid = getUserId(req.user);
+    const contracts = await Contract.find({
+      $or: [
+        { partyAId: uid },
+        { partyBId: uid },
+        { authorizedBy: uid }
+      ]
+    }).sort({ updatedAt: -1 });
     res.json(contracts);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch contracts' });
-  }
-});
+}));
 
-// Give initial consent
-router.post('/:contractId/initial-consent', authMiddleware, async (req, res) => {
-  try {
+// Give consent
+router.post('/:contractId/consent', authMiddleware, asyncHandler(async (req, res) => {
     const contract = await Contract.findOne({ contractId: req.params.contractId });
     if (!contract) {
       return res.status(404).json({ error: 'Contract not found' });
     }
     
-    // Check if user is a party to the contract
-    const validPartyIds = [contract.partyAId].filter(id => id !== 'pending');
-    if (!validPartyIds.includes(req.user.socialMediaId)) {
-      return res.status(403).json({ error: 'Not a party to this contract' });
-    }
-    
-    // Update initial consent - only party A can give initial consent
-    if (contract.partyAId === req.user.socialMediaId) {
-      contract.initialConsent = {
-        partyId: req.user.socialMediaId,
-        timestamp: new Date(),
-        ipAddress: req.ip,
-        userAgent: req.get('User-Agent'),
-        socialPlatform: req.user.platform
-      };
-    } else {
-      // If this is party B, update partyBId and give initial consent
-      contract.partyBId = req.user.socialMediaId;
-      contract.initialConsent = {
-        partyId: req.user.socialMediaId,
-        timestamp: new Date(),
-        ipAddress: req.ip,
-        userAgent: req.get('User-Agent'),
-        socialPlatform: req.user.platform
-      };
-    }
-    
-    // Check if both parties have given initial consent
-    if (contract.initialConsent.partyId && contract.ongoingConsent.partyId) {
-      contract.status = 'pending'; // Ready for ongoing consent
-    }
-    
+    // Allow Party A, existing Party B, or assign Party B if pending
+    const uid = getUserId(req.user);
+    contract.partyBId = uid; 
+    contract.status = 'active';
     contract.updatedAt = new Date();
     await contract.save();
     
     res.json({ success: true, contract });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to give initial consent' });
-  }
-});
-
-// Give ongoing consent
-router.post('/:contractId/ongoing-consent', authMiddleware, async (req, res) => {
-  try {
-    const contract = await Contract.findOne({ contractId: req.params.contractId });
-    if (!contract) {
-      return res.status(404).json({ error: 'Contract not found' });
-    }
-    
-    // Check if user is a party to the contract
-    const validPartyIds = [contract.partyAId, contract.partyBId].filter(id => id !== 'pending');
-    if (!validPartyIds.includes(req.user.socialMediaId)) {
-      return res.status(403).json({ error: 'Not a party to this contract' });
-    }
-    
-    // Check if contract is in pending status (both initial consents given)
-    if (contract.status !== 'pending') {
-      return res.status(400).json({ error: 'Contract not ready for ongoing consent' });
-    }
-    
-    // Update ongoing consent
-    if (contract.partyAId === req.user.socialMediaId) {
-      contract.ongoingConsent = {
-        partyId: req.user.socialMediaId,
-        timestamp: new Date(),
-        ipAddress: req.ip,
-        userAgent: req.get('User-Agent'),
-        socialPlatform: req.user.platform
-      };
-    } else {
-      // Party B giving ongoing consent
-      contract.ongoingConsent = {
-        partyId: req.user.socialMediaId,
-        timestamp: new Date(),
-        ipAddress: req.ip,
-        userAgent: req.get('User-Agent'),
-        socialPlatform: req.user.platform
-      };
-    }
-    
-    // Check if both parties have given ongoing consent
-    if (contract.ongoingConsent.partyId && contract.ongoingConsent.partyId !== contract.initialConsent.partyId) {
-      contract.status = 'active';
-    }
-    
-    contract.updatedAt = new Date();
-    await contract.save();
-    
-    res.json({ success: true, contract });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to give ongoing consent' });
-  }
-});
+}));
 
 // Revoke contract
-router.post('/:contractId/revoke', authMiddleware, async (req, res) => {
-  try {
+router.post('/:contractId/revoke', authMiddleware, asyncHandler(async (req, res) => {
     const contract = await Contract.findOne({ contractId: req.params.contractId });
     if (!contract) {
       return res.status(404).json({ error: 'Contract not found' });
     }
     
     // Check if user is a party to the contract
-    const validPartyIds = [contract.partyAId, contract.partyBId].filter(id => id !== 'pending');
-    if (!validPartyIds.includes(req.user.socialMediaId)) {
+    const validPartyIds = [contract.partyAId, contract.partyBId];
+    const uid = getUserId(req.user);
+    if (!validPartyIds.includes(uid)) {
       return res.status(403).json({ error: 'Not a party to this contract' });
     }
     
@@ -171,115 +95,163 @@ router.post('/:contractId/revoke', authMiddleware, async (req, res) => {
     await contract.save();
     
     res.json({ success: true, contract });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to revoke contract' });
-  }
-});
+}));
 
-// Add lawyer annotation
-router.post('/:contractId/annotate', authMiddleware, requireRole(['lawyer']), async (req, res) => {
-  try {
+// Delete contract 
+router.delete('/:contractId', authMiddleware, asyncHandler(async (req, res) => {
     const contract = await Contract.findOne({ contractId: req.params.contractId });
     if (!contract) {
       return res.status(404).json({ error: 'Contract not found' });
     }
-    
-    const { note, severity = 'info' } = req.body;
-    
-    const annotation = new Annotation({
-      contractId: contract.contractId,
-      lawyerId: req.user.socialMediaId,
-      note,
-      severity
-    });
-    
-    await annotation.save();
-    
-    // If critical annotation, mark contract as invalid
-    if (severity === 'critical') {
-      contract.status = 'invalid';
-      contract.updatedAt = new Date();
-      await contract.save();
+
+    // Only allow deletion if contract is NOT active
+    if (contract.status === 'active') {
+      return res.status(400).json({ error: 'Active contracts cannot be deleted' });
     }
+
+    const uid = getUserId(req.user);
+    const canDelete = contract.partyAId === uid || contract.partyBId === uid || contract.authorizedBy === uid;
+    if (!canDelete) {
+      return res.status(403).json({ error: 'Not authorized to delete this contract' });
+    }
+
+    await Contract.deleteOne({ contractId: req.params.contractId });
+    res.json({ success: true });
+}));
+
+// Bulk delete contracts
+router.post('/bulk-delete', authMiddleware, asyncHandler(async (req, res) => {
+    const { contractIds } = req.body || {};
+    if (!Array.isArray(contractIds) || contractIds.length === 0) {
+      return res.status(400).json({ error: 'contractIds must be a non-empty array' });
+    }
+
+    const uid = getUserId(req.user);
+    const succeeded = [];
+    const failed = [];
+
+    for (const id of contractIds) {
+      try {
+        const contract = await Contract.findOne({ contractId: id });
+        if (!contract) {
+          failed.push({ id, error: 'not_found' });
+          continue;
+        }
+        if (contract.status === 'active') {
+          failed.push({ id, error: 'active_not_deletable' });
+          continue;
+        }
+        const canDelete = contract.partyAId === uid || contract.partyBId === uid || contract.authorizedBy === uid;
+        if (!canDelete) {
+          failed.push({ id, error: 'forbidden' });
+          continue;
+        }
+        await Contract.deleteOne({ contractId: id });
+        succeeded.push(id);
+      } catch (e) {
+        failed.push({ id, error: 'server_error' });
+      }
+    }
+
+    res.json({ succeeded, failed });
+}));
+
+// Authorize a lawyer to view/annotate 
+router.post('/:contractId/authorize-lawyer', authMiddleware, asyncHandler(async (req, res) => {
+    const { lawyerId } = req.body;
+    if (!lawyerId) return res.status(400).json({ error: 'lawyerId is required' });
+
+    const contract = await Contract.findOne({ contractId: req.params.contractId });
+    if (!contract) return res.status(404).json({ error: 'Contract not found' });
+
+    const requesterId = getUserId(req.user);
+    if (contract.partyAId !== requesterId && contract.partyBId !== requesterId) {
+      return res.status(403).json({ error: 'Only Party A or Party B can authorize lawyers' });
+    }
+
+    contract.authorizedLawyers = Array.from(new Set([...(contract.authorizedLawyers || []), lawyerId]));
+    contract.authorizedBy = requesterId;
+    contract.updatedAt = new Date();
+    await contract.save();
+    res.json({ success: true, authorizedLawyers: contract.authorizedLawyers });
+}));
+
+// Add lawyer annotation - writes directly onto the contract and marks invalid
+router.post('/:contractId/annotate', authMiddleware, requireRole(['lawyer']), asyncHandler(async (req, res) => {
+    const contract = await Contract.findOne({ contractId: req.params.contractId });
+    if (!contract) {
+      return res.status(404).json({ error: 'Contract not found' });
+    }
+    // Only assigned lawyers can annotate
+    const uid = getUserId(req.user);
+    if (!(contract.authorizedLawyers || []).includes(uid)) {
+      return res.status(403).json({ error: 'Not authorized to annotate this contract' });
+    }
+
+    const { note } = req.body;
+    // Persist annotation directly on the contract and invalidate it
+    contract.annotation = note || '';
+    contract.status = 'invalid';
+    contract.updatedAt = new Date();
+    await contract.save();
     
-    res.json({ success: true, annotation });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to add annotation' });
-  }
-});
+    res.json({ success: true, contract });
+}));
 
 // Get user's contracts
-router.get('/my-contracts', authMiddleware, async (req, res) => {
-  try {
+router.get('/my-contracts', authMiddleware, asyncHandler(async (req, res) => {
+    const uid = getUserId(req.user);
     const contracts = await Contract.find({
       $or: [
-        { partyAId: req.user.socialMediaId }, 
-        { partyBId: req.user.socialMediaId },
-        { partyBId: 'pending', partyAId: req.user.socialMediaId } // Include contracts where user is party A and party B is pending
+        { partyAId: uid },
+        { partyBId: uid },
+        { authorizedBy: uid }
       ]
-    }).sort({ createdAt: -1 });
-    
+    }).sort({ updatedAt: -1 });
     res.json(contracts);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch contracts' });
-  }
-});
+}));
 
 // Get contract details
-router.get('/:contractId', authMiddleware, async (req, res) => {
-  try {
+router.get('/:contractId', authMiddleware, asyncHandler(async (req, res) => {
     const contract = await Contract.findOne({ contractId: req.params.contractId });
     if (!contract) {
       return res.status(404).json({ error: 'Contract not found' });
     }
     
-    // Check if user is a party to the contract or has admin/lawyer role
-    const validPartyIds = [contract.partyAId, contract.partyBId].filter(id => id !== 'pending');
-    const isParty = validPartyIds.includes(req.user.socialMediaId);
+    // Allow either party (A or B), admin, or assigned lawyer.
+    // If Party B is not yet set (pending), allow any authenticated user to view.
     const isAdminOrLawyer = ['admin', 'lawyer'].includes(req.user.role);
-    
-    if (!isParty && !isAdminOrLawyer) {
+    const uid = getUserId(req.user);
+    const isParty = contract.partyAId === uid || contract.partyBId === uid;
+    const isAssignedLawyer = (contract.authorizedLawyers || []).includes(uid);
+    const partyBOpenToView = !contract.partyBId || contract.partyBId === 'pending';
+    if (!isParty && !isAssignedLawyer && !isAdminOrLawyer && !partyBOpenToView) {
       return res.status(403).json({ error: 'Not authorized to view this contract' });
     }
     
-    // Get annotations for this contract
-    const annotations = await Annotation.find({ contractId: contract.contractId });
-    
-    res.json({ contract, annotations });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch contract' });
-  }
-});
+    // Return contract only; annotations are stored directly on it
+    res.json({ contract });
+}));
 
 // Check contract status
-router.get('/:contractId/status', async (req, res) => {
-  try {
+router.get('/:contractId/status', asyncHandler(async (req, res) => {
     const contract = await Contract.findOne({ contractId: req.params.contractId });
     if (!contract) {
       return res.status(404).json({ error: 'Contract not found' });
     }
     
-    const signaturesCount = (contract.initialConsent.partyId ? 1 : 0) + 
-                           (contract.ongoingConsent.partyId ? 1 : 0);
-    
     res.json({
       status: contract.status,
-      canSign: contract.status === 'pending' || contract.status === 'draft',
-      message: getStatusMessage(contract.status),
-      signaturesCount
+      canSign: contract.status !== 'active',
+      message: getStatusMessage(contract.status)
     });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch contract status' });
-  }
-});
+}));
 
 // Helper function to get status message
 function getStatusMessage(status) {
   switch (status) {
-    case 'draft':
-      return 'Contract is in draft. Both parties need to give initial consent.';
-    case 'pending':
-      return 'Initial consent given. Both parties need to give ongoing consent.';
+    case 'inactive':
+      return 'Awaiting consent. A party can consent to activate this contract.';
     case 'active':
       return 'Contract is active and legally binding.';
     case 'revoked':

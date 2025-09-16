@@ -21,11 +21,8 @@ const connectDB = async () => {
     await mongoose.connection.db.admin().ping();
     console.log('🏓 Pinged your deployment. You successfully connected to MongoDB!');
     
-    // Initialize collections and verify database health
-    await initializeCollections();
     await verifyDatabaseHealth();
     
-    console.log('🎉 Database initialization completed successfully!');
     
   } catch (error) {
     console.error('❌ MongoDB connection error:', error);
@@ -42,7 +39,7 @@ const initializeCollections = async () => {
     console.log('📊 Initializing database collections...');
     
     // Import models to ensure schemas are registered
-    const { User, Contract, Annotation } = require('../models');
+    const { User, Contract } = require('../models');
     
     const db = mongoose.connection.db;
     const collections = await db.listCollections().toArray();
@@ -51,8 +48,7 @@ const initializeCollections = async () => {
     // Define required collections with their Mongoose models
     const requiredCollections = [
       { name: 'users', model: User },
-      { name: 'contracts', model: Contract },
-      { name: 'annotations', model: Annotation }
+      { name: 'contracts', model: Contract }
     ];
     
     for (const collection of requiredCollections) {
@@ -98,7 +94,7 @@ const insertSampleData = async () => {
     console.log('📝 Checking for sample data...');
     
     // Import models
-    const { User, Contract, Annotation } = require('../models');
+    const { User, Contract } = require('../models');
     
     // Check if users collection is empty
     const userCount = await User.countDocuments();
@@ -209,24 +205,7 @@ const insertSampleData = async () => {
       console.log(`ℹ️  Contracts collection already has ${contractCount} documents`);
     }
     
-    // Check if annotations collection is empty
-    const annotationCount = await Annotation.countDocuments();
-    if (annotationCount === 0) {
-      console.log('📝 Inserting sample annotation data...');
-      
-      // Create sample annotation using Mongoose model
-      const sampleAnnotation = new Annotation({
-        contractId: 'sample_contract_' + Date.now(),
-        lawyerId: 'sample_user',
-        note: 'This is a sample annotation for testing purposes.',
-        severity: 'info'
-      });
-      
-      await sampleAnnotation.save();
-      console.log('✅ Sample annotation data inserted');
-    } else {
-      console.log(`ℹ️  Annotations collection already has ${annotationCount} documents`);
-    }
+    // No annotations collection anymore (annotation is embedded on Contract)
     
     console.log('✅ Sample data insertion completed!');
     
@@ -248,7 +227,7 @@ const verifyDatabaseHealth = async () => {
     const collectionNames = collections.map(col => col.name);
     
     // Check required collections exist
-    const requiredCollections = ['users', 'contracts', 'annotations'];
+    const requiredCollections = ['users', 'contracts'];
     const missingCollections = requiredCollections.filter(name => !collectionNames.includes(name));
     
     if (missingCollections.length > 0) {
@@ -264,12 +243,12 @@ const verifyDatabaseHealth = async () => {
     // Test basic operations
     const userCount = await db.collection('users').countDocuments();
     const contractCount = await db.collection('contracts').countDocuments();
-    const annotationCount = await db.collection('annotations').countDocuments();
+    const annotationCount = 0;
     
     console.log('📈 Database statistics:');
     console.log(`  👤 Users: ${userCount}`);
     console.log(`  📄 Contracts: ${contractCount}`);
-    console.log(`  📝 Annotations: ${annotationCount}`);
+    console.log(`  📝 Annotations: integrated on Contract`);
     
     console.log('✅ Database health verification completed!');
     

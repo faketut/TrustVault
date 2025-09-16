@@ -36,6 +36,12 @@ connectDB();
 // Routes
 app.use('/api', apiRoutes);
 
+// Redirect QR/contract deep links to client app
+app.get('/contracts/:contractId', (req, res) => {
+  const clientUrl = process.env.CLIENT_URL || 'http://localhost:3001';
+  res.redirect(302, `${clientUrl}/contracts/${req.params.contractId}`);
+});
+
 // Root endpoint
 app.get('/', (req, res) => {
     res.json({

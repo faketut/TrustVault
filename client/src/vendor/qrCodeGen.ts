@@ -198,4 +198,10 @@ export function generateContractQRCodeDataUrl(content: string): string {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
 
+// Profile QR helper (same rendering pipeline, separate entry for semantics)
+export function generateProfileQRCodeDataUrl(content: string): string {
+  const svg = generateContractQRCodeSVG(content);
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
 

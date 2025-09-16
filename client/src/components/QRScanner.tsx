@@ -8,13 +8,11 @@ interface QRScannerProps {
 }
 
 const QRScanner: React.FC<QRScannerProps> = ({ onContractFound, user }) => {
-  const [qrCode, setQrCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [contract, setContract] = useState<Contract | null>(null);
   const [isScanning, setIsScanning] = useState(false);
-  const [showConfirmation, setShowConfirmation] = useState(false);
-  const [scannedContract, setScannedContract] = useState<Contract | null>(null);
+  // Deprecated confirmation modal and interim scanned state removed
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
@@ -27,11 +25,7 @@ const QRScanner: React.FC<QRScannerProps> = ({ onContractFound, user }) => {
     };
   }, []);
 
-  const handleQRCodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setQrCode(e.target.value);
-    setError('');
-    setContract(null);
-  };
+  // Manual input removed
 
   const startCameraScanning = async () => {
     try {
@@ -68,134 +62,11 @@ const QRScanner: React.FC<QRScannerProps> = ({ onContractFound, user }) => {
     setIsScanning(false);
   };
 
-  const detectQRCode = () => {
-    if (!videoRef.current || !isScanning) return;
+  const detectQRCode = () => {};
 
-    const canvas = document.createElement('canvas');
-    const context = canvas.getContext('2d');
-    
-    if (!context) return;
+  // Deprecated auto-detect and confirmation signing flow removed
 
-    const video = videoRef.current;
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    
-    context.drawImage(video, 0, 0, canvas.width, canvas.height);
-    
-    // Simple QR code detection using a basic pattern matching
-    // In a real implementation, you'd use a proper QR code library
-    // const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-    
-    // For now, we'll simulate QR detection with a timeout
-    // In production, you'd integrate with a proper QR code library
-    setTimeout(() => {
-      if (isScanning) {
-        // Simulate finding a QR code - in real implementation, this would be actual QR detection
-        const mockQRCode = prompt('Enter QR code content (for demo purposes):');
-        if (mockQRCode) {
-          handleQRCodeDetected(mockQRCode);
-        }
-      }
-    }, 2000);
-  };
-
-  const handleQRCodeDetected = async (qrCodeContent: string) => {
-    stopCameraScanning();
-    
-    try {
-      setLoading(true);
-      setError('');
-
-      // Extract contract ID from QR code URL or use as direct ID
-      let contractId = qrCodeContent.trim();
-      
-      // If it's a full URL, extract the contract ID
-      if (qrCodeContent.includes('/contracts/')) {
-        const match = qrCodeContent.match(/\/contracts\/([a-zA-Z0-9-]+)/);
-        if (match) {
-          contractId = match[1];
-        }
-      }
-
-      const response = await contractAPI.getContract(contractId);
-      const foundContract = response.data;
-      
-      setScannedContract(foundContract);
-      setShowConfirmation(true);
-      
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Contract not found');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleConfirmSign = async () => {
-    if (!scannedContract || !user) {
-      setError('Please log in to sign the contract');
-      return;
-    }
-
-    setLoading(true);
-    setError('');
-
-    try {
-      // Update the contract with the user's ID as partyBId
-      await contractAPI.annotate(scannedContract.contractId, {
-        partyBId: user.id,
-        signedBy: user.id,
-        signedAt: new Date().toISOString()
-      });
-
-      // Sign the contract by giving consent
-      await contractAPI.giveInitialConsent(scannedContract.contractId);
-      
-      // Update the contract status
-      const response = await contractAPI.getContract(scannedContract.contractId);
-      setContract(response.data);
-      
-      // Notify parent component
-      onContractFound(response.data);
-      
-      setShowConfirmation(false);
-      setScannedContract(null);
-      setError('');
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to sign contract');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleScan = async () => {
-    if (!qrCode.trim()) {
-      setError('Please enter a QR code or contract ID');
-      return;
-    }
-
-    setLoading(true);
-    setError('');
-
-    try {
-      // Extract contract ID from QR code URL or use as direct ID
-      let contractId = qrCode.trim();
-      
-      // If it's a full URL, extract the contract ID
-      if (qrCode.includes('/contracts/')) {
-        const match = qrCode.match(/\/contracts\/([a-zA-Z0-9-]+)/);
-        if (match) {
-          contractId = match[1];
-        }
-      }
-
-      const response = await contractAPI.getContract(contractId);
-      setContract(response.data);
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Contract not found');
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Manual input removed
 
   const handleSign = async () => {
     if (!contract || !user) {
@@ -207,8 +78,8 @@ const QRScanner: React.FC<QRScannerProps> = ({ onContractFound, user }) => {
     setError('');
 
     try {
-      // Sign the contract by giving consent
-      await contractAPI.giveInitialConsent(contract.contractId);
+      // Sign the contract by giving consent (single-step)
+      await contractAPI.giveConsent(contract.contractId);
       
       // Update the contract status
       const response = await contractAPI.getContract(contract.contractId);
@@ -335,40 +206,7 @@ const QRScanner: React.FC<QRScannerProps> = ({ onContractFound, user }) => {
           )}
         </div>
 
-        {/* Manual Input */}
-        <div style={{ marginBottom: '20px' }}>
-          <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
-            Or enter QR code/Contract ID manually:
-          </label>
-          <div style={{ display: 'flex', gap: '10px' }}>
-            <input
-              type="text"
-              value={qrCode}
-              onChange={handleQRCodeChange}
-              placeholder="Enter QR code or contract ID"
-              style={{ 
-                flex: 1, 
-                padding: '10px', 
-                border: '1px solid #ccc', 
-                borderRadius: '4px' 
-              }}
-            />
-            <button
-              onClick={handleScan}
-              disabled={loading || isScanning}
-              style={{
-                padding: '10px 20px',
-                backgroundColor: '#1976d2',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: (loading || isScanning) ? 'not-allowed' : 'pointer'
-              }}
-            >
-              {loading ? 'Scanning...' : 'Scan'}
-            </button>
-          </div>
-        </div>
+        {/* Manual input removed */}
       </div>
 
       {error && (
@@ -502,115 +340,7 @@ const QRScanner: React.FC<QRScannerProps> = ({ onContractFound, user }) => {
         </ul>
       </div>
 
-      {/* Confirmation Modal */}
-      {showConfirmation && scannedContract && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.7)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000
-        }} onClick={() => setShowConfirmation(false)}>
-          <div style={{
-            backgroundColor: 'white',
-            padding: '30px',
-            borderRadius: '8px',
-            maxWidth: '500px',
-            width: '90%',
-            maxHeight: '90%',
-            overflow: 'auto'
-          }} onClick={e => e.stopPropagation()}>
-            <h3 style={{ marginTop: 0, color: '#333' }}>Confirm Contract Signing</h3>
-            
-            <div style={{ marginBottom: '20px' }}>
-              <p style={{ marginBottom: '15px', fontSize: '16px' }}>
-                You are about to sign this contract as <strong>Party B</strong>:
-              </p>
-              
-              <div style={{ 
-                backgroundColor: '#f8f9fa', 
-                padding: '15px', 
-                borderRadius: '4px',
-                marginBottom: '15px'
-              }}>
-                <div style={{ marginBottom: '10px' }}>
-                  <strong>Contract ID:</strong> {scannedContract.contractId}
-                </div>
-                <div style={{ marginBottom: '10px' }}>
-                  <strong>Status:</strong> 
-                  <span style={{ 
-                    padding: '2px 6px',
-                    borderRadius: '3px',
-                    backgroundColor: scannedContract.status === 'active' ? '#d4edda' : 
-                                   scannedContract.status === 'inactive' ? '#fff3cd' : '#f8d7da',
-                    color: scannedContract.status === 'active' ? '#155724' : 
-                           scannedContract.status === 'inactive' ? '#856404' : '#721c24',
-                    marginLeft: '5px'
-                  }}>
-                    {scannedContract.status.toUpperCase()}
-                  </span>
-                </div>
-                <div style={{ marginBottom: '10px' }}>
-                  <strong>Start Time:</strong> {formatDateTime(scannedContract.startDateTime)}
-                </div>
-                <div>
-                  <strong>End Time:</strong> {formatDateTime(scannedContract.endDateTime)}
-                </div>
-              </div>
-
-              <div style={{ 
-                backgroundColor: '#e3f2fd', 
-                padding: '15px', 
-                borderRadius: '4px',
-                border: '1px solid #bbdefb'
-              }}>
-                <p style={{ margin: 0, fontSize: '14px', color: '#1976d2' }}>
-                  <strong>Your ID will be set as:</strong> {user?.id || 'Unknown'}
-                </p>
-                <p style={{ margin: '5px 0 0 0', fontSize: '12px', color: '#666' }}>
-                  By signing, you agree to the terms of this consent contract.
-                </p>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-              <button
-                onClick={() => setShowConfirmation(false)}
-                disabled={loading}
-                style={{
-                  padding: '10px 20px',
-                  backgroundColor: '#6c757d',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: loading ? 'not-allowed' : 'pointer'
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleConfirmSign}
-                disabled={loading}
-                style={{
-                  padding: '10px 20px',
-                  backgroundColor: '#28a745',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: loading ? 'not-allowed' : 'pointer'
-                }}
-              >
-                {loading ? 'Signing...' : 'Sign Contract'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Deprecated confirmation modal removed */}
     </div>
   );
 };

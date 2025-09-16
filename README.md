@@ -1,5 +1,4 @@
-# Sex Consent Contract Management System
-## 性同意合同管理系统
+# TrustVault
 
 > **⚠️ Disclaimer**: This system is for educational and research purposes only. Please consult legal professionals and ensure compliance with local laws before any practical application.
 
@@ -8,7 +7,7 @@
 ```bash
 # Clone and install
 git clone <repository-url>
-cd sex-consent-app
+cd TrustVault
 npm install
 
 # Configure environment
@@ -72,7 +71,7 @@ Frontend (React) ←→ Backend (Express) ←→ Database (MongoDB)
 ## 📁 Project Structure
 
 ```
-sex-consent-app/
+-consent-app/
 ├─ server.js              # Backend API server
 ├─ client/                # React frontend
 │  ├─ src/components/     # React components
@@ -90,7 +89,7 @@ sex-consent-app/
 # Core
 NODE_ENV=development
 PORT=3000
-MONGODB_URI=mongodb://localhost/sex-consent-system
+MONGODB_URI=mongodb://localhost/TrustVault
 JWT_SECRET=your-super-secret-jwt-key
 CLIENT_URL=http://localhost:3001
 
